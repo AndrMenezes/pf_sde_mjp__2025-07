@@ -1,0 +1,95 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\documentclass[12pt,a4paper]{article}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\usepackage{amssymb,geometry,graphicx,setspace, scalefnt, verbatim, amsfonts,bm,float,booktabs,multirow,amsmath,mathtools,color,dsfont,arydshln,subcaption}
+\usepackage[left]{lineno}
+\usepackage[round,sort]{natbib}
+%\usepackage[nolists,tablesfirst]{endfloat}
+\usepackage[hidelinks]{hyperref}
+\usepackage{enumerate}
+\usepackage{dsfont}
+\usepackage{cancel}
+\usepackage{ulem}
+\geometry{a4paper,nohead,left=2.0cm,right=2.0cm,bottom=2.5cm,top=2.5cm}
+\usepackage[hidelinks]{hyperref}
+\usepackage{enumerate}
+\usepackage{dsfont}
+\usepackage{cancel}
+\usepackage{ulem}
+\geometry{a4paper,nohead,left=2.0cm,right=2.0cm,bottom=2.5cm,top=2.5cm}
+
+
+\usepackage[ruled,vlined,linesnumbered]{algorithm2e}
+
+% Defining useful commands for notation
+
+\newcommand{\indep}{\perp \!\!\! \perp}
+\newcommand{\dd}{\mathop{}\!\mathrm{d}}
+\allowdisplaybreaks
+
+\begin{document}
+\onehalfspacing
+\linenumbers
+
+
+\begin{center}
+    \textbf{Research visit}\\\smallskip
+
+    Andr\'{e} F. B. Menezes\\
+    Hamilton Institute, Maynooth University \\
+    Last compiled: \today\vspace{-\medskipamount}
+
+    %\textbf{Abstract}\vspace{0.1cm}
+\end{center}
+
+
+\section{Research plan}
+
+The proposed research visit will be undertaken with Professor Chris Sherlock
+from the department of Mathematics and Statistics at Lancaster University, UK.
+The visit is scheduled to start on 12 January 2026 and will last for one month.
+
+The goal of the visit is to work on sequential Monte Carlo (SMC) algorithms to
+improve filtering and inference on high (or even moderate) dimension Markov
+jump processes (MJP).
+
+\section{Timeline}
+A general work timeline is defined below by weeks.
+
+I am not so sure on the timeline, as one month goes to fast.
+
+When you mentioned to use particle MCMC scheme for inference, i have a couple
+of questions, which is not clear:
+1. The filtering algorithm will be construced using the SMC algorithm you wrote?
+
+
+I am asking this, because it is not 100\% clear to me if particle MCMC
+stands for using MCMC to perform inference on the parameters of the state-space
+model, or use a MCMC move inside the particle filtering?
+
+2. From the particle algorithm in 1., we used its estimate of the marginal
+likelihood in the MCMC algorithm?
+3. The MCMC algorithm is the random-walk Metropolis-Hastings?
+
+
+\begin{itemize}
+	\item[Week 1 (12th-16th January)]: coding a particle MCMC scheme for
+	inference on a moderate-dimensional SDE.
+
+	\item[Week 2 (19th-23th January)]:
+
+	\item[Week 3 (26th-30th January)]: replicate the particle MCMC scheme for MJP
+	simulated using tau-leap scheme.
+
+	\item[Week 4 (2nd-6th February)]:
+
+	\item[Week 5 (9th-13th February)]: increase the dimension of the MJP
+\end{itemize}
+
+
+
+\bibliographystyle{elsarticle-harv}
+\bibliography{references}
+
+
+\end{document}
