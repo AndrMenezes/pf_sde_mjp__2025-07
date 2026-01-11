@@ -37,7 +37,7 @@ std::vector<int> resample_indices(std::vector<int>& ancestors,
 class StateSpaceAR1 {
 public:
   // (de)constructor
-  StateSpaceAR1(std::vector<double> y, std::vector<double> parameters,
+  StateSpaceAR1(std::vector<double> y,
                 std::vector<double> initial_ss, int n_particles);
   ~StateSpaceAR1();
   // fields
@@ -53,7 +53,7 @@ public:
   double mean_state, var_state, sd_initial, mean_initial;
 
   // Functions to run the KF and BF
-  void RunKalmanFilter();
+  void RunKalmanFilter(std::vector<double> parameters);
   // Vector to keep the mean and variance of the states
   std::vector<double> mean_ss;
   std::vector<double> var_ss;
@@ -66,23 +66,20 @@ public:
   // observation y_{t} | x_{t}
   double SimX0(); // prior time t = 0
   double SimXt(double x); // Transition x_t | x_{t-1}
-  void RunBootstrapFilter();
+  void RunBootstrapFilter(std::vector<double> parameters);
   // State filtering
   std::vector<double> x_particles, x_weights, log_uweights, weights;
   std::vector<int> x_ancestors, ancestors, aux_ancestors;
 
+  void RunParticleMCMC();
+
 
 };
 
-StateSpaceAR1::StateSpaceAR1(std::vector<double> y, std::vector<double> parameters,
+StateSpaceAR1::StateSpaceAR1(std::vector<double> y,
                              std::vector<double> initial_ss,
                              int n_particles) : y(y), n_particles(n_particles) {
   n_obs = y.size();
-  phi = parameters[0];
-  sigma = parameters[1];
-  sigma2 = sigma*sigma;
-  tau = parameters[2];
-  tau2 = tau*tau;
 
   mean_initial = initial_ss[0];
   sd_initial = initial_ss[1];
@@ -94,17 +91,23 @@ StateSpaceAR1::StateSpaceAR1(std::vector<double> y, std::vector<double> paramete
 
 StateSpaceAR1::~StateSpaceAR1() {}
 
-void StateSpaceAR1::RunKalmanFilter() {
+void StateSpaceAR1::RunKalmanFilter(std::vector<double> parameters) {
+
+  phi = parameters[0];
+  sigma = parameters[1];
+  tau = parameters[2];
+  sigma2 = sigma*sigma;
+  tau2 = tau*tau;
 
   // Initialise the objects to keep the mean and variance of state
   mean_ss.resize(n_obs);
   var_ss.resize(n_obs);
   var_pred.resize(n_obs);
-
+  lml = 0.0;
   // Run the Kalman filter
   for (int t=0; t < n_obs; t++) {
 
-    std::cout << t << "\n";
+    // std::cout << t << "\n";
 
     // Evolve to the prior x_{t} | y_{1:{t-1}}
     double at = phi * mean_state;
@@ -119,18 +122,26 @@ void StateSpaceAR1::RunKalmanFilter() {
     mean_ss[t] = mean_state;
     var_ss[t] = var_state;
     var_pred[t] = qt;
+    lml += R::dnorm4(y[t], at, std::sqrt(qt), 1);
   }
 }
 
 double StateSpaceAR1::SimX0() {
-  return R::norm_rand()*sd_initial + mean_initial;
+  return mean_initial + R::norm_rand()*sd_initial;
 }
 
 double StateSpaceAR1::SimXt(double x) {
   return phi * x + R::norm_rand()*tau ;
 }
 
-void StateSpaceAR1::RunBootstrapFilter() {
+void StateSpaceAR1::RunBootstrapFilter(std::vector<double> parameters) {
+
+  // Set parameters
+  phi = parameters[0];
+  sigma = parameters[1];
+  tau = parameters[2];
+  sigma2 = sigma*sigma;
+  tau2 = tau*tau;
 
   // Aux to keep the information for a given t
   log_uweights.resize(n_particles);
@@ -157,7 +168,7 @@ void StateSpaceAR1::RunBootstrapFilter() {
     log_uweights[j] = R::dnorm4(y[0], x_particles[j], sigma, 1);
   }
 
-  // Compute weights and the log-likelihood
+  // Normalise the weights and get the log-likelihood contribution into l_tmp
   get_ws_lml(log_uweights, weights, l_tmp, n_particles);
   lml += l_tmp;
   // Resample the ancestors
@@ -175,11 +186,11 @@ void StateSpaceAR1::RunBootstrapFilter() {
     for (int j=0; j < n_particles; j++) {
       int idx = t*n_particles + j;
       //std::cout << idx << "\n";
-      x_particles[idx] = SimXt(x_particles[(t-1)*n_particles + j]);
-      // Get the particle-specific weight
+      x_particles[idx] = SimXt(x_particles[(t-1)*n_particles + ancestors[j]]);
+      // Compute particle weights
       log_uweights[j] = R::dnorm4(y[t], x_particles[idx], sigma, 1);
     }
-    // Resample
+    // Normalise the weights and get the log-likelihood contribution into l_tmp
     get_ws_lml(log_uweights, weights, l_tmp, n_particles);
     // Increase the likelihood
     lml += l_tmp;
@@ -194,13 +205,15 @@ void StateSpaceAR1::RunBootstrapFilter() {
   }
 }
 
+void StateSpaceAR1::RunParticleMCMC() {}
+
 
 // Expose above class in R
 RCPP_MODULE(StateSpaceAR1) {
 
   Rcpp::class_<StateSpaceAR1>("StateSpaceAR1")
 
-  .constructor<std::vector<double> , std::vector<double> , std::vector<double>, int>()
+  .constructor<std::vector<double>, std::vector<double>, int>()
 
   .method("RunKalmanFilter", &StateSpaceAR1::RunKalmanFilter)
   .method("RunBootstrapFilter", &StateSpaceAR1::RunBootstrapFilter)

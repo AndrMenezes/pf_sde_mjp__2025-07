@@ -22,6 +22,12 @@ I already have some specific thoughts on the changes that would be needed, so th
 
 ## Project tasks
 
+- Coding up a bootstrap particle filter for a simple system. I chose the AR1 model defined as follows
+$x_t = \phi x_{t-1} + w_t$, $y_t = x_t + e_t$, where $w_t \sim N[0, \tau^2]$ and $e_t\sim N[0, \sigma^2]$.
+The initial condition is given by the stationary distribution $x_0 \sim N[0, \tau^2 / (1 - \phi^2)]$.
+
+- Using the BF to perform particle MCMC for inference on the parameters of the system.
+
 - Coding up a simple version of a particle MCMC scheme for inference on a
 moderate-dimensional (time-discretised) SDE.
 
