@@ -8,9 +8,9 @@
 
 rm(list = ls())
 gc()
-Rcpp::sourceCpp(file = "./R/ar1.cpp")
+Rcpp::sourceCpp(file = "./R/ar1/ar1.cpp")
 source("./R/wquantile.R")
-source("./R/BFfilterAR1.R")
+source("./R/ar1/BFfilterAR1.R")
 
 
 # Simulate data ----------------------------------------------------------------

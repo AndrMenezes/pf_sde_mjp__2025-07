@@ -7,9 +7,9 @@
 
 rm(list = ls())
 gc()
-Rcpp::sourceCpp(file = "./R/ar1.cpp")
+Rcpp::sourceCpp(file = "./R/ar1/ar1.cpp")
 # source("./R/wquantile")
-# source("./R/BFfilterAR1.R")
+# source("./ar1/R/BFfilterAR1.R")
 
 
 # Simulate data ----------------------------------------------------------------
@@ -110,10 +110,3 @@ coda::effectiveSize(coda::as.mcmc(phi_draws))
 bayesplot::mcmc_acf(x = phi_draws_mat)
 bayesplot::mcmc_trace(x = phi_draws_mat)
 bayesplot::mcmc_recover_hist(x = phi_draws_mat, true = true_phi)
-
-
-
-
-
-
-
