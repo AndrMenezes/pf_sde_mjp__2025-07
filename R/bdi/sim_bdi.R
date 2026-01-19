@@ -13,11 +13,8 @@ x0 <- 500L
 true_theta <- c(0.5, 0.8, 40)
 hazard_bdi <- function(x, theta) c(x * theta[1], x * theta[2], theta[3])
 S_bdi <- matrix(c(1, -1, 1), nrow = 1)
-S_bdi %*% c(4, 2 , 3)
-
-# (1, -1, 1) [4, 2, 3]
-
-4 -2 + 3
+# S_bdi %*% c(4, 2 , 3)
+# (1, -1, 1) [4, 2, 3] = 4 -2 + 3
 
 # Simulate using different methods ---------------------------------------------
 

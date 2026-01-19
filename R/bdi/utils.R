@@ -64,6 +64,13 @@ sim_frm <- function(theta, x0, hazard, S, tmax) {
   list(x = x, tt = tt)
 }
 
+#' Poisson-leao method to simulate coupled chemical reaction systems.
+#' @param theta vector of parameters that control the system.
+#' @param hazard a function-vector for the hazard function associated to the system.
+#' @param x0 initial condition for the state.
+#' @param S stoichiometry matrix.
+#' @param tmax maximum time.
+#' @param dt leap time step. floor(1 / dt) gives number of points for one unit of time.
 sim_poisson_leap <- function(theta, x0, hazard, S, tmax, dt = 0.1) {
   d <- length(x0)
   u <- length(theta)

@@ -1,4 +1,5 @@
-#include <Rcpp.h>
+#include <RcppArmadillo.h>
+// [[Rcpp::depends(RcppArmadillo)]]
 
 void get_ws_lml(std::vector<double> &lw, std::vector<double> &w, double &s,
                 int n) {
@@ -55,20 +56,21 @@ public:
   double x0;
 
   // Simulate from the transition x_t | x_{t-1}
-  double SimXt(double x);
+  double SimXt(double x, int t_cur, int j_cur);
   void RunBootstrapFilter(std::vector<double> parameters);
 
   std::vector<double> hazard(double x);
 
 
   // Fields for the BF
+  arma::mat x_path;
   std::vector<double> x_particles, x_weights, log_uweights, weights;
   std::vector<int> x_ancestors, ancestors, aux_ancestors;
 
 };
 
 BDI::BDI(std::vector<double> y, double x0, int n_particles, double dt)
-  : y(y), n_particles(n_particles), dt(dt) {
+  : y(y), x0(x0), n_particles(n_particles), dt(dt) {
   n_obs = y.size();
   n_dt = static_cast<int>(1.0 / dt);
 
@@ -83,15 +85,19 @@ std::vector<double> BDI::hazard(double x) {
   return {x * mu, x * lambda, gamma};
 }
 
-// This is the important function!
-double BDI::SimXt(double x) {
+// Simulate the path trajectory
+double BDI::SimXt(double x, int t_cur, int j_cur) {
+
   for (int i = 0; i < n_dt; i++) {
     std::vector<double> h = hazard(x);
     std::vector<double> r(3);
-    r[0] = R::rpois(mu * dt);
-    r[1] = R::rpois(lambda* dt);
-    r[2] = R::rpois(gamma * dt);
+    r[0] = R::rpois(h[0] * dt);
+    r[1] = R::rpois(h[1] * dt);
+    r[2] = R::rpois(h[2] * dt);
     x += r[0] - r[1] + r[2];
+    // Save the path
+    int row_index = (t_cur-1)*n_dt + i;
+    x_path(row_index, j_cur) = x;
   }
   return x;
 }
@@ -110,9 +116,10 @@ void BDI::RunBootstrapFilter(std::vector<double> parameters) {
   aux_ancestors.resize(n_particles);
 
   // To keep the particles, ancestors and the weights
-  x_particles.resize(n_obs * n_dt * n_particles);
-  x_ancestors.resize(n_obs * n_dt * n_particles);
-  x_weights.resize(n_obs * n_dt * n_particles);
+  x_path = arma::zeros<arma::mat>(n_obs * n_dt, n_particles);
+  x_particles.resize((n_obs+1) * n_particles);
+  x_ancestors.resize((n_obs+1) * n_particles);
+  x_weights.resize((n_obs+1) * n_particles);
   // Access: x[j * m + i], ith observation jth particle
 
   // Initialise the ancestors: this tells us which particle is "alive", hence
@@ -124,29 +131,30 @@ void BDI::RunBootstrapFilter(std::vector<double> parameters) {
 
   // At time t=0 simulate from the prior x_0 and compute its weight using the likelihood
   for (int j=0; j < n_particles; j++) {
-    // x_particles[j] = SimX0();
-    // log_uweights[j] = R::dpois(y[0], x_particles[j], 1);
     x_particles[j] = x0;
+    // x_particles[j] = SimXt(x0, 0, j);
+    log_uweights[j] = R::dpois(y[0], x_particles[j], 1);
   }
   // Normalise the weights and get the log-likelihood contribution into l_tmp
-  // get_ws_lml(log_uweights, weights, l_tmp, n_particles);
-  // lml += l_tmp;
+  get_ws_lml(log_uweights, weights, l_tmp, n_particles);
+  lml += l_tmp;
   // Resample the ancestors
-  ancestors = aux_ancestors;//resample_indices(aux_ancestors, weights, n_particles);
+  ancestors = resample_indices(aux_ancestors, weights, n_particles);
 
   // Save the weights and the ancestors
   for (int j=0; j < n_particles; j++) {
-    x_weights[j] = 1/n_particles;
+    x_weights[j] = (double) 1.0 / n_particles;
     x_ancestors[j] = ancestors[j];
   }
 
-  for (int t=1; t < n_obs; t++) {
+  for (int t=1; t <= n_obs; t++) {
     // std::cout<< t << "\n";
     // Propagate
     for (int j=0; j < n_particles; j++) {
       int idx = t*n_particles + j;
       //std::cout << idx << "\n";
-      x_particles[idx] = SimXt(x_particles[(t-1)*n_particles + ancestors[j]]);
+      // std::cout << x_particles[(t-1)*n_particles + ancestors[j]] << "\n";
+      x_particles[idx] = SimXt(x_particles[(t-1)*n_particles + ancestors[j]], t, j);
       // Compute particle weights
       log_uweights[j] = R::dpois(y[t], x_particles[idx], 1);
     }
@@ -163,9 +171,9 @@ void BDI::RunBootstrapFilter(std::vector<double> parameters) {
       x_ancestors[t*n_particles + j] = ancestors[j];
     }
   }
+
 }
 
-void BDI::RunParticleMCMC() {}
 
 
 // Expose above class in R
@@ -173,7 +181,9 @@ RCPP_MODULE(BDI) {
 
   Rcpp::class_<BDI>("BDI")
 
-  .constructor<std::vector<double>, std::vector<double>, int>()
+  .constructor<std::vector<double>, double, int, double>()
+//std::vector<double> , double , int ,  dt
+
 
   .method("RunBootstrapFilter", &BDI::RunBootstrapFilter)
 
@@ -183,6 +193,7 @@ RCPP_MODULE(BDI) {
    // BF fields
   .field("lml", &BDI::lml)
   .field("particles", &BDI::x_particles)
+  .field("path", &BDI::x_path)
   .field("ancestors", &BDI::x_ancestors)
   .field("weights", &BDI::x_weights)
   .field("weights_curr", &BDI::weights)
