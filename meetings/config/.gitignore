@@ -1,0 +1,6 @@
+*
+!.gitignore
+!setup_knitr.R
+!sydney-fonts.css
+!sydney.css
+!remark-zoom.js

@@ -98,21 +98,18 @@ ode_solution_bdi <- function(theta, tt, x0) {
   gama / (lambda - mu) + (x0 - gama / (lambda - mu)) * exp((mu - lambda) * tt)
 }
 
+#' Function from Chirs Sherlock notes on Bootstrap filter for compute
+#' weighted quantiles
+wquantile <- function(xs, ws, prob) {
+  ws <- ws[order(xs)]
+  xs <- xs[order(xs)]
+  sws <- sum(ws)
+  cws <- cumsum(ws)
+  np <- length(prob)
+  qs <- rep(0,np)
+  for (i in 1:np) {
+    qs[i] <- xs[which.max(cws / sws >= prob[i])]
+  }
+  qs
+}
 
-
-
-
-# n_obs <- 10L
-# n_particles <- 1L
-# n_dt <- 10L
-# x_state <- matrix(data = 0.0, nrow = n_obs * n_dt, ncol = n_particles)
-# for (i in seq_len(n_obs)) {
-#   for (j in seq_len(n_particles)) {
-#     # Call Poisson-leap for each particles, then appending
-#     for (k in seq_len(n_dt)) {
-#       row_index <- (i - 1) * n_dt + k
-#       cat(row_index, "\n")
-#       # x_state[i * k, j]
-#     }
-#   }
-# }

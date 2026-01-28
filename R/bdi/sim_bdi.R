@@ -4,7 +4,7 @@ source("./R/bdi/utils.R")
 # Example: Birth-Death-Immigration (BDI) model
 # X --> 2X (birth: \mu)
 # X --> 0 (death: \lambda)
-# 0 --> X (immigration: \lambda)
+# 0 --> X (immigration: \gamma)
 # theta = (mu[birth], lambda[death], gamma[immigration])
 
 # Settings ---------------------------------------------------------------------
@@ -91,7 +91,7 @@ xt <- out_p_01$x[, 1L]
 t_continuous <- out_p_01$tt
 n <- length(xt)
 
-retain <- c(0, seq(11, length(t_continuous), by = 10))
+retain <- c(1, seq(11, length(t_continuous), by = 10))
 t_ <- t_continuous[retain]
 xt_ <- xt[retain]
 yt <- stats::rpois(n = n, lambda = xt)

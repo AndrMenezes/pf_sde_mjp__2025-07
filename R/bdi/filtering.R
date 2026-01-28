@@ -1,7 +1,6 @@
 rm(list = ls())
-source("./R/bdi/utils.R")
+source("./R/utils.R")
 source("./R/wquantile.R")
-Rcpp::sourceCpp(file = "./R/bdi/bdi.cpp")
 Rcpp::sourceCpp(file = "./R/bdi/bdi.cpp")
 
 # Example: Birth-Death-Immigration (BDI) model
@@ -58,8 +57,8 @@ matlines(x_path, type = "l", lty = 1)
 # matlines(x_path, type = "l", lty = 1)
 graphics.off()
 
-particles <- matrix(mod$particles, nrow = tmax+1, ncol = n_particles, byrow = TRUE)
-weights <- matrix(mod$weights, nrow = tmax+1, ncol = n_particles, byrow = TRUE)
+particles <- matrix(mod$particles, nrow = tmax, ncol = n_particles, byrow = TRUE)
+weights <- matrix(mod$weights, nrow = tmax, ncol = n_particles, byrow = TRUE)
 dim(particles)
 head(particles)
 tail(particles)
@@ -127,4 +126,5 @@ p2 <- ggplot(data_true_x, aes(x = time)) +
 
 p_grid <- cowplot::plot_grid(p1 + ggtitle("Trajectories"), p2 + ggtitle("Filtering"))
 p_grid
-
+cowplot::save_plot(filename = "./figures/bdi_sim.png", plot = p_grid, base_height = 8,
+                   bg = "white")

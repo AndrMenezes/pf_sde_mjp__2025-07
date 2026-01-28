@@ -1,0 +1,31 @@
+---
+title: "Progress meeting"
+author: "André Menezes"
+date: "January 12, 2026"
+output:
+  xaringan::moon_reader:
+    css: ["default", "./config/sydney.css", "./config/sydney-fonts.css"]
+    self_contained: FALSE
+    nature:
+      ratio: "16:9"
+      highlightStyle: github
+      highlightLines: TRUE
+      countIncrementalSlides: FALSE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, fig.align = "center", out.width = "90%")
+```
+
+# Agenda
+
+- Initial implementations:
+
+  - Bootstrap particle filter for the following model:
+$x_t = \phi x_{t-1} + w_t$, $y_t = x_t + e_t$, where $w_t \sim N[0, \tau^2]$ and $e_t\sim N[0, \sigma^2]$, with initial condition given by the stationary distribution $x_0 \sim N[0, \tau^2 / (1 - \phi^2)]$.
+
+  - Particle MCMC to perform inference for $\phi$, using the prior $\operatorname{logit}(\phi) \sim N[0, 1.0]$.
+
+- Next steps:
+  - Implement particle MCMC scheme for inference on a moderate-dimensional (time-discretised) SDE.
+  - Understand the tempering approach writing in Chris' notes, and how can I implement them for a simple SDE example.

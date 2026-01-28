@@ -60,3 +60,5 @@ Implicit, I need to understand:
 Given particle MCMC is completely new to you, we should take a step back from my initial suggestion.  It would be sensible to start off with coding up a bootstrap particle filter for a simple system (e.g. try the linear Gaussian model, where you can work out the true likelihood via the Kalman filter and, hence, check your particle filter code is correct) and then using this to perform particle MCMC for inference on the parameters of the system.
 
 - Use this library: https://www.boost.org/
+
+- Script to compute log(n!): https://www.johndcook.com/cpp_log_factorial.html
