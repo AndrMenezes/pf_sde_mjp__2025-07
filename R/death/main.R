@@ -35,32 +35,13 @@ target_sucess <- 51L
 max_trials <- 1e4L
 
 mod <- new(Death, xt, x0, 1/10, 100, target_sucess, max_trials)
-mod$RunBootstrapFilter(true_theta)
-(lml_boots <- mod$lml)
-
-particles <- matrix(mod$particles, nrow = tmax, ncol = n_particles, byrow = TRUE)
-weights <- matrix(mod$weights, nrow = tmax, ncol = n_particles, byrow = TRUE)
-rowSums(weights)
-# Quantiles of the filtering distribution
-qs <- matrix(nrow = tmax, ncol = 3)
-for (i in 1:tmax) {
-  qs[i,] <- wquantile(particles[i, ], weights[i, ], prob = c(0.05, 0.5, 0.95))
-}
-yrange <- range(c(min(qs), max(qs), max(xt)))
-plot(xt, type = "p", ylim = yrange)
-# lines(apply(particles, 1, median), col = "blue")
-lines(qs[, 1], col = "blue", lty = 2)
-lines(qs[, 2], col = "blue")
-lines(qs[, 3], col = "blue", lty = 2)
+lml_boots <- mod$RunBootstrapFilter(true_theta)
 
 # Check the alive PF
-mod$RunAliveFilter(true_theta)
-lml_alive <- mod$lml
-particles <- matrix(mod$particles, nrow = tmax, ncol = target_sucess - 1,
-                    byrow = TRUE)
-head(particles)
-plot(xt, type = "p")
-lines(apply(particles, 1, median), col = "blue")
+lml_alive <- mod$RunAliveFilter(true_theta)
+
+# Check the Franken Filter
+lml_franken <- mod$RunFrankenFilter(true_theta)
 
 # Exact likelihood p(x_t | x_{t-1})
 lml_exact <- sum(stats::dbinom(x = xt[-1], size = xt[-tmax],
@@ -81,15 +62,14 @@ for (j in seq_along(N_particles)) {
   cat(j, "\n")
   mod <- new(Death, xt, x0, 1/10, N_particles[j], target_sucess, max_trials)
   lmls <- mclapply(seq_len(mc), function(i) {
-    mod$RunBootstrapFilter(true_theta)
-    return(mod$lml)
+    return(mod$RunBootstrapFilter(true_theta))
   }, mc.cores = 20L)
   lmls <- unlist(lmls)
   list_lmls[[j]] <- lmls
   var_lml[j] <- var(lmls)
 }
-cbind(N_particles, var_lml, exp_lml = sapply(list_lmls, mean))
-lml_exact
+tab_bf <- cbind(N_particles, var_lml, exp_lml = sapply(list_lmls, mean),
+                exact = lml_exact)
 
 # Alive filtering
 TARGET_SUCCESS <- c(21L, 51L, 101L, 201L)
@@ -102,24 +82,34 @@ for (j in seq_len(nr)) {
   cat(j, "\n")
   lmls <- mclapply(seq_len(mc), function(i) {
     mod <- new(Death, xt, x0, 1/10, 1, grid$s[j], grid$mp[j])
-    mod$RunAliveFilter(true_theta)
-    return(mod$lml)
+    return(mod$RunAliveFilter(true_theta))
   }, mc.cores = 20L)
   lmls <- unlist(lmls)
   list_lmls_alive[[j]] <- lmls
   var_lml_alive[j] <- var(lmls)
 }
+tab_af <- cbind(grid, var_lml_alive, exp_lml = sapply(list_lmls_alive, mean),
+                exact = lml_exact)
 
-cbind(grid, var_lml_alive, exp_lml = sapply(list_lmls_alive, mean))
+# Franken filtering
+list_lmls_franken <- vector(mode = "list", length = nr)
+var_lml_franken <- numeric(length = nr)
+for (j in seq_len(nr)) {
+  cat(j, "\n")
+  lmls <- mclapply(seq_len(mc), function(i) {
+    mod <- new(Death, xt, x0, 1/10, 1, grid$s[j], grid$mp[j])
+    return(mod$RunFrankenFilter(true_theta))
+  }, mc.cores = 20L)
+  lmls <- unlist(lmls)
+  list_lmls_franken[[j]] <- lmls
+  var_lml_franken[j] <- var(lmls)
+}
 
-
-
-
-# for (i in 1:1000) {
-#   mod <- new(Death, xt, x0, 1/10, 1, 51, 1000)
-#   mod$RunAliveFilter(true_theta)
-#   if (mod$lml == -1000) stop(i, mod$lml)
-# }
+tab_ff <- cbind(grid, var_lml_franken, exp_lml = sapply(list_lmls_franken, mean),
+                exact = lml_exact)
+tab_bf
+tab_af
+tab_ff
 
 
 # particleMCMC with Bootstrap filter -------------------------------------------
@@ -157,10 +147,10 @@ graphics.off()
 
 # particle MCMC with alive filter
 res_alive <- particleMCMC_death(x = xt, x0 = x0, n_particles = 1L,
-                                max_trials = 1e4L,
-                                target_sucess = 40L, dt = 1/10,
+                                max_trials = 1000L,
+                                target_sucess = 50L, dt = 1/10,
                                 ndpost = 50000L, nskip = 0L, filter = "alive",
-                                sd_prop = 0.4, printevery = 100L)
+                                sd_prop = 2, printevery = 100L)
 attr(res_alive, "AcceptRate")
 coda::effectiveSize(coda::as.mcmc(res_alive))
 coda::effectiveSize(coda::as.mcmc(res_alive[-(1:20000L)]))
@@ -178,7 +168,33 @@ plot(density(res_alive[-rmv]), main = "", xlab = expression(theta))
 points(x = true_theta[1L], y = 0)
 graphics.off()
 
-cbind(bf = mean(res_bf[-(1:20000L)]/true_theta),
-      af = mean(res_alive[-(1:20000L)]/true_theta))
+
+# particle MCMC with franken filter
+res_franken <- particleMCMC_death(x = xt, x0 = x0, n_particles = 1L,
+                                  max_trials = 400L,
+                                  target_sucess = 50L, dt = 1/10,
+                                  ndpost = 50000L, nskip = 0L, filter = "franken",
+                                  sd_prop = 0.4, printevery = 100L)
+attr(res_franken, "AcceptRate")
+coda::effectiveSize(coda::as.mcmc(res_franken))
+coda::effectiveSize(coda::as.mcmc(res_franken[-(1:20000L)]))
+plot(log(res_franken), type = "l")
+plot(res_franken, type = "l");  abline(h = true_theta, col = "red")
+mean(res_franken[-(1:1000L)]/true_theta)
+plot(density(res_franken[-(1:1000L)]))
+
+# Use exact likelhood
+res_exact <- exactMCMC_death(y = xt, x0 = x0, niter = 50000L)
+attr(res_exact, "AcceptRate")
+coda::effectiveSize(coda::as.mcmc(res_exact))
+coda::effectiveSize(coda::as.mcmc(res_exact[-(1:20000L)]))
+plot(log(res_exact), type = "l")
+plot(res_exact, type = "l");  abline(h = true_theta, col = "red")
+plot(density(res_exact[-(1:1000L)]))
+mean(res_exact[-(1:1000L)]/true_theta)
 
 
+cbind(exact = mean(res_exact[-rmv]/true_theta),
+      bf = mean(res_bf[-rmv]/true_theta),
+      af = mean(res_alive[-rmv]/true_theta),
+      ff = mean(res_franken[-rmv]/true_theta))
