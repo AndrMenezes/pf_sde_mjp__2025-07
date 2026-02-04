@@ -5,7 +5,7 @@ path_local <- "./R/bdi_gamma_noise/"
 # path_fig <- file.path(path_local, "figures")
 source("./R/utils.R")
 Rcpp::sourceCpp(file = file.path(path_local, "bdi.cpp"))
-# source(file.path(path_local, "particleMCMC.R"))
+source(file.path(path_local, "particleMCMC.R"))
 
 
 # set.seed(1212)
@@ -38,31 +38,36 @@ t_retain <- t_continuous[retain]
 xt_retain <- xt[retain]
 
 par(mfrow = c(3, 2))
-alpha <- c(0.5, 1.0, 3.0, 5.0, 10, 100)
+alpha <- c(3.0, 5.0, 10, 50, 80, 100)
+y <- matrix(0.0, nrow = tmax, ncol = length(alpha))
 for (k in seq_along(alpha)) {
-  yt <- stats::rgamma(n = tmax, shape = alpha[k], rate = alpha[k] / xt_retain)
-  plot(0:29, yt, col = "red", ylim = c(0, max(max(yt), max(xt))), pch = 19,
+  y[, k] <- stats::rgamma(n = tmax, shape = alpha[k], rate = alpha[k] / xt_retain)
+  plot(0:29, y[, k], col = "red", ylim = c(0, max(max(y[, k]), max(xt))), pch = 19,
        ylab = "", xlab = "t", main = paste0("alpha = ", alpha[k]))
   lines(t_continuous, xt)
   lines(0:29, xt_retain, col = "blue", pch = 18)
 }
 graphics.off()
-#
-true_alpha <- 50.0
-yt <- stats::rgamma(n = tmax, shape = true_alpha, rate = true_alpha / xt_retain)
-plot(0:29, yt, col = "red", ylim = c(0, max(max(yt), max(xt))), pch = 19,
-     ylab = "", xlab = "t", main = paste0("alpha = ", true_alpha))
-lines(t_continuous, xt)
-lines(0:29, xt_retain, col = "blue", pch = 18)
+
+id_ <- which(alpha == 10.0)
+true_alpha <- alpha[id_]
+yt <- y[, id_]
+
+# true_alpha <- 50.0
+# yt <- stats::rgamma(n = tmax, shape = true_alpha, rate = true_alpha / xt_retain)
+# plot(0:29, yt, col = "red", ylim = c(0, max(max(yt), max(xt))), pch = 19,
+#      ylab = "", xlab = "t", main = paste0("alpha = ", true_alpha))
+# lines(t_continuous, xt)
+# lines(0:29, xt_retain, col = "blue", pch = 18)
 
 
 # Simple check
 # Rcpp::sourceCpp(file = file.path(path_local, "bdi.cpp"))
-n_particles <- 600L
-max_trials <- 4000L
-target_success <- 200L
+n_particles <- 200L
+max_trials <- 200L
+target_success <- tmax
 mod <- new(BDI, yt, x0, 1/10, true_alpha, n_particles, target_success, max_trials)
-mod$RunBootstrapFilter(true_theta)
+mod$RunBootstrapFilter(true_theta)#c(0.09, .8, 0.1)
 mod$lml
 mod$RunFrankenFilter(true_theta)
 mod$lml
@@ -75,7 +80,7 @@ mc <- 2000L
 # BF
 N_particles <- c(10L, 20L, 30L, 35, 40L, 50L, 100L, 200L, 300L)
 list_lmls <- vector(mode = "list", length = length(N_particles))
-var_lml <- numeric(length = length(N_particles))
+var_lml <- mean_lml <- numeric(length = length(N_particles))
 for (j in seq_along(N_particles)) {
   cat(j, "\n")
   mod <- new(BDI, yt, x0, 1/10, true_alpha, N_particles[j], target_success, max_trials)
@@ -84,14 +89,15 @@ for (j in seq_along(N_particles)) {
     return(mod$lml)
   }, mc.cores = 20L)
   lmls <- unlist(lmls)
-  list_lmls[[j]] <- lmls
+  # list_lmlmean_lmls[[j]] <- lmls
+  mean_lml[j] <- mean(lmls)
   var_lml[j] <- var(lmls)
 }
-tab_bf <-cbind(N_particles, var_lml, mean_lml = sapply(list_lmls, function(x) mean(x)))
+tab_bf <- cbind(N_particles, var_lml, mean_lml)
 plot(N_particles, var_lml)
 
 # Franken filtering
-TARGET_SUCCESS <- c(21L, 51L, 101L, 201L)
+TARGET_SUCCESS <- c(20L, 30L, 50L, 100L, 200L)
 MAX_TRIALS <- c(100L, 500L, 1000L, 2000L)
 grid <- expand.grid(s = TARGET_SUCCESS, mp = MAX_TRIALS)
 nr <- nrow(grid)
@@ -110,6 +116,7 @@ for (j in seq_len(nr)) {
   var_lml_franken[j] <- var(lmls)
 }
 tab_ff <- cbind(grid, var_lml_franken, exp_lml = mean_lml_franken)
+tab_ff
 
 out <- replicate(1000, {
   mod <- new(BDI, yt, x0, 1/10, true_alpha, 10, 21, 500)
@@ -125,7 +132,42 @@ ids <- which(out[3, ] == 500)
 t(out[, ids])
 
 
-# Run particle MCMC using BF ---------------------------------------------------
+
+# Try particleMCMC -------------------------------------------------------------
+
+res <- particleMCMC_bdi(y = yt, x0 = x0, dt = 1/10,
+                        filter = "bootstrap",
+                        n_particles = 400L,
+                        shape = true_alpha,
+                        ndpost = 8000L, nskip = 4000L,
+                        theta_fix = true_theta[-1L],
+                        wh_fix = c(2L, 3L),
+                        sd_prior = 1.0,
+                        S_prop = 0.5,
+                        printevery = 100L, theta_init = true_theta[1L])
+
+res2 <- particleMCMC_bdi(y = yt, x0 = x0, dt = 1/10,
+                        filter = "franken",
+                        target_success = 30L, max_trials = 400L,
+                        shape = true_alpha,
+                        ndpost = 8000L, nskip = 4000L,
+                        theta_fix = true_theta[-1L],
+                        wh_fix = c(2L, 3L),
+                        sd_prior = 1.0,
+                        S_prop = 0.5,
+                        printevery = 10L, theta_init = true_theta[1L])
+plot(res[, 1], type = "l")
+plot(res2[, 1], type = "l")
+ess_bf <- coda::effectiveSize(coda::as.mcmc(res))
+ess_ff <- coda::effectiveSize(coda::as.mcmc(res2))
+
+ess_bf/attr(res, "time")[3L]
+ess_ff/attr(res2, "time")[3L]
+
+
+
+# Particle MCMC to perform inference on \mu ------------------------------------
+
 n_particles <- 600L
 max_trials <- 4000L
 target_success <- 200L
@@ -135,16 +177,20 @@ mod1 <- new(BDI, yt, x0, 1/10, true_alpha, n_particles, 1, 1)
 system.time(
   mod1$RunParticleMCMC_mu(true_theta[2L], true_theta[3L], 1.0, 0.04, 5000L))
 plot(mod1$draws_mu[-(1:1000L)], type = "l"); abline(h = true_theta[1], col = "red")
+plot(mod1$draws_mu[-(1:1000L)], type = "l"); abline(h = true_theta[1], col = "red")
 sd_opt <- sd(log(mod1$draws_mu[-(1:1000L)]))
-coda::effectiveSize(coda::as.mcmc(mod1$draws_mu[-(1:1000L)]))/60
+coda::effectiveSize(coda::as.mcmc(mod1$draws_mu[-(1:1000L)]))
 
 # Particle MCMC using FF
 mod2 <- new(BDI, yt, x0, 1/10, true_alpha, n_particles, target_success, max_trials)
 system.time(
   mod2$RunParticleMCMCFranken_mu(true_theta[2L], true_theta[3L], 1.0, 0.04, 5000L))
 plot(mod2$draws_mu[-(1:1000L)], type = "l"); abline(h = true_theta[1], col = "red")
+plot(mod2$draws_mu, type = "l"); abline(h = true_theta[1], col = "red")
 sd_opt <- sd(log(mod2$draws_mu[-(1:1000L)]))
-coda::effectiveSize(coda::as.mcmc(mod1$draws_mu[-(1:1000L)]))/60
+
+coda::effectiveSize(coda::as.mcmc(mod1$draws_mu))
+coda::effectiveSize(coda::as.mcmc(mod2$draws_mu))
 
 
 

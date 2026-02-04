@@ -247,14 +247,16 @@ void BDI::RunFrankenFilter(std::vector<double> parameters) {
       // Increment number of trials
       m++;
     }
-    // save number of trials
-    number_trials[t] = m;
+
+    // use only m_t - 1 particles, i.e., set to -1000.
+    if (k == target_success) ln_w[m-1] = -1000;
+
     // Normalise the weights and compute the log-likelihood contribution
-    std::fill(w.begin(), w.end(), 0.0); // if use this then can change max_trials to m
+    std::fill(w.begin(), w.end(), 0.0);
     get_ws_lml(ln_w, w, l_tmp, m);
     lml += l_tmp;
 
-    // This compute the "correct" log-likelihood
+    // This compute the "correct" log-likelihood when the target success isn't reached
     // if (k < target_success) {
     //   // Normalise the weights and compute the log-likelihood contribution
     //   get_ws_lml(ln_w, w, l_tmp, max_trials);
@@ -262,10 +264,13 @@ void BDI::RunFrankenFilter(std::vector<double> parameters) {
     //   //anc_type = 0;
     // } else {
     //   // Normalise the weights and compute the log-likelihood contribution
+    //   ln_w[m]=-1000;
     //   get_ws_lml(ln_w, w, l_tmp, max_trials);
     //   lml += l_tmp; // sum(log(w)) for j=1, m_t-1
     //   //anc_type = 1;
     // }
+
+
 
     // Update the particles, by copying _cur into _prev. I think this is not
     // efficient, but idk other way
@@ -273,6 +278,8 @@ void BDI::RunFrankenFilter(std::vector<double> parameters) {
     // Set the log-weights equal to -Inf for next time y[t]
     std::fill(ln_w.begin(), ln_w.end(), -1000);
 
+    // save number of trials
+    number_trials[t] = m;
     //m_prev = m;
   }
 }

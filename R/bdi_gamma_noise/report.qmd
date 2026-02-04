@@ -1,0 +1,226 @@
+---
+title: "Birth-Death-Immigration with gamma noise observations"
+author: "André F. B. Menezes"
+format: pdf
+---
+
+```{r setup, include=FALSE}
+rm(list = ls())
+library(ggplot2)
+library(cowplot)
+library(patchwork)
+library(parallel)
+
+# Source some functions and the C++ class
+source("../utils.R")
+source("./particleMCMC.R")
+Rcpp::sourceCpp(file = "bdi.cpp")
+
+# Knitr setup
+knitr::opts_chunk$set(
+    tidy = FALSE,
+    comment = "#",
+    collapse = TRUE, ## colapsa chunks em R Markdown
+    fig.width = 12,
+    fig.height = 8,
+    fig.align = "center",
+    fig.pos = "H",
+    out.width = "100%",
+    warning = FALSE,
+    message = FALSE,
+    echo = FALSE,
+    dpi = 200, ## aumentar o dpi para exibir maior.
+    cache.path = "cache/",
+    fig.path = "figures/")
+
+# Plot theme
+theme_set(
+  theme_cowplot(font_size = 20, font_family = "Palatino") +
+    background_grid() +
+    theme(text = element_text(family = "Palatino", size = 20),
+          legend.position = "top")
+)
+```
+
+
+# Birth-Death-Immigration (BDI)
+
+The Birth-Death-Immigration (BDI) is model to describe the population of
+individuals (for example, country, bacteria, etc), considering three possible 
+types of events: birth, death and immigration. The model can be written using
+the notation of coupled chemical reactions, as follows
+\begin{align*}
+\mathcal{X} &\xrightarrow{\mu} 2\mathcal{X} \quad (\text{birth})\\
+\mathcal{X} &\xrightarrow{\lambda} \emptyset \quad (\text{death}) \\
+\emptyset &\xrightarrow{\gamma} \mathcal{X} \quad (\text{immigration})
+\end{align*}
+where $\mathcal{X} = \mathbb{Z}_{+}$ denotes the state space of the process.
+The parameters of the model are $\theta = (\mu,\lambda, \gamma)$. In this model,
+individuals reproduce with constant hazard $\mu$, each individual dies with constant
+hazard $\lambda$, and individuals arrive into the population with constant
+hazard $gamma$. Consequently, the population increases by one when birth or immigration
+event occurs, and decreases by one when death event occurs.
+
+The hazard function associated to the BDI model is
+$$
+h(x, \theta) := \left( x\mu, x\lambda, \gamma \right).
+$$
+
+
+Let $X_t$ denote the number of individuals at time $t$. 
+The process $\{X_t\}_{t>0}$ is naturraly describe by a Markov jump process, that is,
+a continous time discrete state Markov process.
+Let $dt$ denote a very small time period, the transition kernel (probabilities)
+of BDI process can be written as follows:
+\begin{align*}
+\mathbb{P}\left\lbrack X_{t+dt} = x+1 \mid X_{t}= x\right\rbrack &=
+(\gamma + x\mu)dt + o(dt)\\
+\mathbb{P}\left\lbrack X_{t+dt} = x-1 \mid X_{t}= x\right\rbrack &= x\lambda dt + o(dt)\\
+\mathbb{P}\left\lbrack X_{t+dt} = x \mid X_{t}= x\right\rbrack &= 1 - (\gamma + x\mu - x\lambda)dt+o(dt)\\
+\mathbb{P}\left\lbrack X_{t+dt} = y \mid X_{t} = x\right\rbrack &= o(dt), \quad y\notin \{x-1, x, x+1\}
+\end{align*}
+where $o(dt)/dt \rightarrow 0$ as $dt \rightarrow 0$.
+The instantaneous rate, or hazard function, is defined by:
+$$
+h(x_t, \theta) = \lim_{dt\rightarrow 0}\frac{1}{dt}\mathbb{P}\left\lbrack X_{t+dt} = x_{t+dt} \mid X_t= x_t \right\rbrack = \left( x_t\mu, x_t\lambda, \gamma \right)
+$$
+
+
+
+we can use a Markov jump
+process (MJP) to describe the evolution of the state via:
+$$
+X_t = x_0 + \sum_{i=1}^3 S_i\,R_{i,t}
+$$
+where $S = (1, -1, 1)$, and $R_{i,t}$.
+
+
+In a short interval $d_t$, the expected value of $X_t$ is
+$$
+E(dX_t) = \left(\gamma + (\mu - \lambda) x \right)dt
+$$
+
+# Simulate data
+
+
+```{r sim-data}
+# Settings
+tmax <- 30L
+dt <- 1 / 30 # Use 1/dt observations for each time period
+x0 <- 500L
+true_theta <- c(0.5, 0.8, 40)
+hazard_bdi <- function(x, theta) c(x * theta[1], x * theta[2], theta[3])
+S_bdi <- matrix(c(1, -1, 1), nrow = 1)
+
+# Simulate
+sim_xt <- sim_poisson_leap(tmax = tmax, x0 = x0, theta = true_theta,
+                           hazard = hazard_bdi, S = S_bdi, dt = dt)
+
+# Adding a observational layer
+xt <- sim_xt$x[, 1L]
+t_continuous <- sim_xt$tt
+n <- length(xt)
+retain <- c(1, seq.int(11, length(t_continuous), length.out = tmax - 1))
+t_retain <- t_continuous[retain]
+xt_retain <- xt[retain]
+
+par(mfrow = c(1, 3))
+true_alphas <- c(5.0, 10, 50)
+y <- matrix(0.0, nrow = tmax, ncol = length(true_alphas))
+for (k in seq_along(true_alphas)) {
+  y[, k] <- stats::rgamma(n = tmax, shape = true_alphas[k], rate = true_alphas[k] / xt_retain)
+  plot(0:29, y[, k], col = "red", ylim = c(0, max(max(y[, k]), max(xt))), pch = 19,
+       ylab = "", xlab = "t", main = paste0("alpha = ", true_alphas[k]))
+  lines(t_continuous, xt)
+  lines(0:29, xt_retain, col = "blue", pch = 18)
+}
+```
+
+
+# Parameter inference for $\mu$
+
+```{r inference, results='hide', cache=TRUE}
+NDPOST <- 8000L
+NSKIP <- 6000L
+N_PARTICLES <- MAX_TRIALS <- 400L
+TARGET_SUCCESS <- 40L
+na <- length(true_alphas)
+tab_bf <- tab_ff <- matrix(nrow = na, ncol = 6L)
+draws_bf <- matrix(0.0, nrow = NDPOST, ncol = na)
+draws_ff <- matrix(0.0, nrow = NDPOST, ncol = na)
+for (k in seq_len(na)) {
+  res_bf <- particleMCMC_bdi(y = y[, k], x0 = x0, dt = 1/10,
+                             filter = "bootstrap",
+                             n_particles = N_PARTICLES,
+                             shape = true_alphas[k],
+                             ndpost = NDPOST, nskip = NSKIP,
+                             theta_fix = true_theta[-1L],
+                             wh_fix = c(2L, 3L),
+                             sd_prior = 1.0,
+                             S_prop = 0.5,
+                             printevery = 100L, theta_init = true_theta[1L])
+  draws_bf[, k] <- res_bf[, 1L]
+  # Run FF
+  res_ff <- particleMCMC_bdi(y = y[, k], x0 = x0, dt = 1/10,
+                          filter = "franken",
+                          target_success = TARGET_SUCCESS,
+                          max_trials = MAX_TRIALS,
+                          shape = true_alphas[k],
+                          ndpost = NDPOST, nskip = NSKIP,
+                          theta_fix = true_theta[-1L],
+                          wh_fix = c(2L, 3L),
+                          sd_prior = 1.0,
+                          S_prop = 0.5,
+                          printevery = 10L, theta_init = true_theta[1L])
+  draws_ff[, k] <- res_ff[, 1L]
+  # Compute ESS
+  ess_bf <- coda::effectiveSize(coda::as.mcmc(res_bf))
+  ess_ff <- coda::effectiveSize(coda::as.mcmc(res_ff))
+  # Save info
+  tab_bf[k, 1L] <- ess_bf
+  tab_bf[k, 2L] <- attr(res_bf, "time")[3L]
+  tab_bf[k, 3L] <- ess_bf/attr(res_bf, "time")[3L]
+  tab_bf[k, 4L] <- mean(res_bf)
+  tab_bf[k, 5L] <- quantile(res_bf, probs = 0.025)
+  tab_bf[k, 6L] <- quantile(res_bf, probs = 0.975)
+  # FF
+  tab_ff[k, 1L] <- ess_ff
+  tab_ff[k, 2L] <- attr(res_ff, "time")[3L]
+  tab_ff[k, 3L] <- ess_ff/attr(res_ff, "time")[3L]
+  tab_ff[k, 4L] <- mean(res_ff)
+  tab_ff[k, 5L] <- quantile(res_ff, probs = 0.025)
+  tab_ff[k, 6L] <- quantile(res_ff, probs = 0.975)
+}
+```
+
+```{r tab}
+colnames(tab_bf) <- colnames(tab_ff) <- c("ess", "sec", "ess/s", "mean", "lo", "up")
+tab_bf <- as.data.frame(tab_bf)
+tab_ff <- as.data.frame(tab_ff)
+tab_bf$pf <- "BF"
+tab_ff$pf <- "FF"
+tab_ff$shape <- true_alphas
+tab_bf$shape <- true_alphas
+tab <- rbind(tab_bf, tab_ff)
+tab <- tab[, c("shape", "pf", "ess", "sec", "ess/s", "mean", "lo", "up")]
+tab
+```
+
+
+# Parameter inference for $\mu$ and $\gamma$
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
