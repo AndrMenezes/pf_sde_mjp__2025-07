@@ -64,6 +64,7 @@ particleMCMC_bdi <- function(y, x0, dt,
   draws <- matrix(0.0, nrow = ndpost, ncol = nparms)
   accept_rate <- 0L
 
+  ini <- proc.time()
   # Get estimate of the likelihood
   if (filter == "bootstrap") mod$RunBootstrapFilter(parms)
   else mod$RunFrankenFilter(parms)
@@ -107,7 +108,6 @@ particleMCMC_bdi <- function(y, x0, dt,
   # Run the posterior sampling
   number_trials <- 0.0
   # lml <- numeric(ndpost)
-  ini <- proc.time()
   for (k in seq_len(ndpost)) {
     if (k %% printevery == 0L) cat("Posterior sampling:", k,  "of", ndpost, "\n")
     # Sample from proposal at log scale
