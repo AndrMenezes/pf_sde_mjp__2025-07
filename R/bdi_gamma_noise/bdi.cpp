@@ -26,8 +26,8 @@ int sample_discrete(const std::vector<double> &probs, const int &k) {
 }
 
 std::vector<int> resample_indices(std::vector<int>& ancestors,
-                      const std::vector<double>& probs,
-                      int n_particles) {
+                                  const std::vector<double>& probs,
+                                  int n_particles) {
   std::vector<int> new_ancestors(n_particles);
   for (int j = 0; j < n_particles; ++j)
     new_ancestors[j] = ancestors[sample_discrete(probs, n_particles)];
@@ -66,7 +66,7 @@ public:
                           double sd_proposal, int ndpost);
   void RunParticleMCMC_mu_gamma(double lambda_fix, double sd_prior,
                                 double sd_proposal, int ndpost);
-  int AncestorSample(int m, int k, std::vector<double> w);
+  // int AncestorSample(int m, int k, std::vector<double> w);
 
   // void RunParticleMCMC_mu_gamma(std::vector<double> parameters);
 
@@ -114,7 +114,7 @@ double BDI::SimXt(double x) { //, int t_cur, int j_cur
     r[1] = R::rpois(h[1] * dt);
     r[2] = R::rpois(h[2] * dt);
     x += r[0] - r[1] + r[2];
-    if (x < 0) x = 0.0; // std::cout << x << "\n";
+    if (x <= 0) { x = 0.001;} //; //std::cout << x << "\n";
     // Save the trajectory
     // int row_index = (t_cur)*n_dt + i - idx_offset;
     // x_bridge(row_index, j_cur) = x;
@@ -144,7 +144,10 @@ void BDI::RunBootstrapFilter(std::vector<double> parameters) {
 
   // Initialise the ancestors: this tells us which particle is "alive", hence
   // we don't need to copy or change the x_particles
-  for (int j=0; j < n_particles; j++) aux_ancestors[j] = j;
+  for (int j=0; j < n_particles; j++) {
+    aux_ancestors[j] = j;
+    ancestors[j] = j;
+  }
 
   // Set the log-likelihood at 0
   lml = 0.0;
@@ -207,7 +210,7 @@ void BDI::RunFrankenFilter(std::vector<double> parameters) {
 
   // int max_particles = max_trials - 1;
   // Create container to keep maximum number particles for a given time t
-  std::vector<double> x_particles_cur(max_trials, 0.0);
+  std::vector<double> x_particles_cur(max_trials);
   std::vector<double> x_particles_prev(max_trials, x0);
 
   // Ancestors
@@ -217,43 +220,49 @@ void BDI::RunFrankenFilter(std::vector<double> parameters) {
   number_trials.resize(n_obs);
 
   // Weights
-  std::vector<double> ln_w(max_trials, -1000);
-  std::vector<double> w(max_trials);
-  for (int j=0; j<max_trials; j++) {w[j] = (double) 1.0/max_trials;}
+  log_uweights.resize(max_trials);
+  weights.resize(max_trials);
+  //std::vector<double> ln_w(max_trials, -1000);
+  // std::vector<double> w(max_trials);
+  for (int j=0; j<max_trials; j++) {
+    weights[j] = (double) 1.0/max_trials;
+    log_uweights[j] = -5000.0;
+  }
   // Auxiliary variables
-  int m_prev = max_trials, anc_type = 0, m = 0, anc = 0;
-  double k=0.0, l_tmp = 0.0;
+  int m = 0, anc = 0;
+  double k = 0.0, l_tmp = 0.0, ln_sup_g;
 
   // Set log-like to 0
   lml = 0.0;
 
   // Loop over observations
-  for (int t=0; t<n_obs; t++) {
+  for (int t=0; t < n_obs; t++) {
     m=0;
     k=0.0;
-    l_tmp = 0.0;
+    ln_sup_g = R::dgamma(y[t], shape, y[t]/shape, 1);
     while (m < max_trials & k < target_success) {
       // Sample ancestors
-      anc = sample_discrete(w, max_trials);
-      // int anc = AncestorSample(m_prev, anc_type, w);
+      anc = sample_discrete(weights, max_trials);
       // Simulate transition: x_t | x_{t-1}
       x_particles_cur[m] = SimXt(x_particles_prev[anc]);
-      if (x_particles_prev[anc] == 0.0) std::cout << t << " " << x_particles_prev[anc] << "\n";
       // Compute log-weights
-      ln_w[m] = R::dgamma(y[t], shape, x_particles_cur[m]/shape, 1);
+      log_uweights[m] = R::dgamma(y[t], shape, x_particles_cur[m]/shape, 1);
       // Compute number of success (k)
-      k += exp(ln_w[m] - R::dgamma(y[t], shape, y[t]/shape, 1));
-      // std::cout << "t: " << t << " m " << m << " k: " << k << "\n";
+      k += exp(log_uweights[m] - ln_sup_g);
+      // double inc = exp(log_uweights[m] - ln_sup_g);
+      // std::cout << "t: " << t << " m " << m << " " << inc << "\n";// " x[m] " << x_particles_cur[m] << " ln w: " << ln_w[m] << " ln g(x*) " << ln_sup_g << "\n";
       // Increment number of trials
       m++;
     }
 
     // use only m_t - 1 particles, i.e., set to -1000.
-    if (k == target_success) ln_w[m-1] = -1000;
+    //if (k == target_success) ln_w[m-1] = -1000;
 
     // Normalise the weights and compute the log-likelihood contribution
-    std::fill(w.begin(), w.end(), 0.0);
-    get_ws_lml(ln_w, w, l_tmp, m);
+    std::fill(weights.begin(), weights.end(), 0.0);
+    l_tmp = 0.0;
+    std::vector<double> ln_w(log_uweights.begin() + 1, log_uweights.begin() + m-1);
+    get_ws_lml(ln_w, weights, l_tmp, ln_w.size());
     lml += l_tmp;
 
     // This compute the "correct" log-likelihood when the target success isn't reached
@@ -270,13 +279,11 @@ void BDI::RunFrankenFilter(std::vector<double> parameters) {
     //   //anc_type = 1;
     // }
 
-
-
     // Update the particles, by copying _cur into _prev. I think this is not
-    // efficient, but idk other way
+    // efficient might need to change
     x_particles_prev = x_particles_cur;
     // Set the log-weights equal to -Inf for next time y[t]
-    std::fill(ln_w.begin(), ln_w.end(), -1000);
+    std::fill(log_uweights.begin(), log_uweights.end(), -5000.0);
 
     // save number of trials
     number_trials[t] = m;

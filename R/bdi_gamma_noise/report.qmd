@@ -124,7 +124,7 @@ retain <- c(1, seq.int(11, length(t_continuous), length.out = tmax - 1))
 t_retain <- t_continuous[retain]
 xt_retain <- xt[retain]
 
-par(mfrow = c(1, 3))
+par(mfrow = c(3, 1))
 true_alphas <- c(5.0, 10, 50)
 y <- matrix(0.0, nrow = tmax, ncol = length(true_alphas))
 for (k in seq_along(true_alphas)) {
@@ -137,12 +137,13 @@ for (k in seq_along(true_alphas)) {
 ```
 
 
-# Parameter inference for $\mu$
+# Inference only for $\mu$
 
-```{r inference, results='hide', cache=TRUE}
-NDPOST <- 8000L
-NSKIP <- 6000L
-N_PARTICLES <- MAX_TRIALS <- 400L
+```{r ff, results='hide', cache=TRUE}
+NDPOST <- 10000L
+NSKIP <- 10000L
+N_PARTICLES <- 40L
+MAX_TRIALS <- 300L
 TARGET_SUCCESS <- 40L
 na <- length(true_alphas)
 tab_bf <- tab_ff <- matrix(nrow = na, ncol = 6L)
@@ -191,6 +192,62 @@ for (k in seq_len(na)) {
   tab_ff[k, 5L] <- quantile(res_ff, probs = 0.025)
   tab_ff[k, 6L] <- quantile(res_ff, probs = 0.975)
 }
+
+```
+
+```{r inference, results='hide', cache=TRUE}
+# NDPOST <- 8000L
+# NSKIP <- 6000L
+# N_PARTICLES <- 40L
+# MAX_TRIALS <- 300L
+# TARGET_SUCCESS <- 40L
+# na <- length(true_alphas)
+# tab_bf <- tab_ff <- matrix(nrow = na, ncol = 6L)
+# draws_bf <- matrix(0.0, nrow = NDPOST, ncol = na)
+# draws_ff <- matrix(0.0, nrow = NDPOST, ncol = na)
+# for (k in seq_len(na)) {
+#   res_bf <- particleMCMC_bdi(y = y[, k], x0 = x0, dt = 1/10,
+#                              filter = "bootstrap",
+#                              n_particles = N_PARTICLES,
+#                              shape = true_alphas[k],
+#                              ndpost = NDPOST, nskip = NSKIP,
+#                              theta_fix = true_theta[-1L],
+#                              wh_fix = c(2L, 3L),
+#                              sd_prior = 1.0,
+#                              S_prop = 0.5,
+#                              printevery = 100L, theta_init = true_theta[1L])
+#   draws_bf[, k] <- res_bf[, 1L]
+#   # Run FF
+#   res_ff <- particleMCMC_bdi(y = y[, k], x0 = x0, dt = 1/10,
+#                           filter = "franken",
+#                           target_success = TARGET_SUCCESS,
+#                           max_trials = MAX_TRIALS,
+#                           shape = true_alphas[k],
+#                           ndpost = NDPOST, nskip = NSKIP,
+#                           theta_fix = true_theta[-1L],
+#                           wh_fix = c(2L, 3L),
+#                           sd_prior = 1.0,
+#                           S_prop = 0.5,
+#                           printevery = 10L, theta_init = true_theta[1L])
+#   draws_ff[, k] <- res_ff[, 1L]
+#   # Compute ESS
+#   ess_bf <- coda::effectiveSize(coda::as.mcmc(res_bf))
+#   ess_ff <- coda::effectiveSize(coda::as.mcmc(res_ff))
+#   # Save info
+#   tab_bf[k, 1L] <- ess_bf
+#   tab_bf[k, 2L] <- attr(res_bf, "time")[3L]
+#   tab_bf[k, 3L] <- ess_bf/attr(res_bf, "time")[3L]
+#   tab_bf[k, 4L] <- mean(res_bf)
+#   tab_bf[k, 5L] <- quantile(res_bf, probs = 0.025)
+#   tab_bf[k, 6L] <- quantile(res_bf, probs = 0.975)
+#   # FF
+#   tab_ff[k, 1L] <- ess_ff
+#   tab_ff[k, 2L] <- attr(res_ff, "time")[3L]
+#   tab_ff[k, 3L] <- ess_ff/attr(res_ff, "time")[3L]
+#   tab_ff[k, 4L] <- mean(res_ff)
+#   tab_ff[k, 5L] <- quantile(res_ff, probs = 0.025)
+#   tab_ff[k, 6L] <- quantile(res_ff, probs = 0.975)
+# }
 ```
 
 ```{r tab}

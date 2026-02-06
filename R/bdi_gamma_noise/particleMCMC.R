@@ -48,8 +48,7 @@ particleMCMC_bdi <- function(y, x0, dt,
   # Number of parameters
   nparms <- 3L - length(theta_fix)
   # Draw from the prior
-  if (is.null(theta_init))
-    theta_cur <- exp(stats::rnorm(nparms, 0.0, sd = sd_prior[-wh_fix]))
+  if (is.null(theta_init)) theta_cur <- exp(stats::rnorm(nparms, 0.0, sd = sd_prior[-wh_fix]))
   else theta_cur <- theta_init
   log_theta_cur <- log(theta_cur)
 
@@ -71,39 +70,43 @@ particleMCMC_bdi <- function(y, x0, dt,
   lml_cur <- mod$lml
 
   # Run the burn-in/adapt phase to estimate the covariance of the proposal
-  draws_adapt <- matrix(0.0, nrow = nadapt, ncol = nparms)
-  for (k in seq_len(nskip)) {
-    if (k %% printevery == 0L) cat("Adapt phase:", k, "of", nskip, "\n")
-    # Sample from proposal at log scale
-    log_theta_prop <- rprop(nparms, log_theta_cur, S_prop)
-    theta_prop <- exp(log_theta_prop)
-    # Compute log marginal likelihood using BF
-    parms[-wh_fix] <- theta_prop
-    if (filter == "bootstrap") mod$RunBootstrapFilter(parms)
-    else mod$RunFrankenFilter(parms)
-    lml_prop <- mod$lml
-    # log-prior
-    lprior_prop <- sum(-0.5 * (log_theta_prop/sd_prior)^2)
-    lprior_cur <- sum(-0.5 * (log_theta_cur/sd_prior)^2)
-    # MH ratio
-    lr <- lml_prop - lml_cur + lprior_prop - lprior_cur
-    if (log(stats::runif(1L)) < lr) {
-      # Accept
-      theta_cur <- theta_prop
-      log_theta_cur <- log(theta_cur)
-      lml_cur <- lml_prop
-      accept_rate <- accept_rate + 1L
+  if (nskip > 0) {
+    draws_adapt <- matrix(0.0, nrow = nadapt, ncol = nparms)
+    for (k in seq_len(nskip)) {
+      if (k %% printevery == 0L) cat("Adapt phase:", k, "of", nskip, "\n")
+      # Sample from proposal at log scale
+      log_theta_prop <- rprop(nparms, log_theta_cur, S_prop)
+      theta_prop <- exp(log_theta_prop)
+      # Compute log marginal likelihood using BF
+      parms[-wh_fix] <- theta_prop
+      if (filter == "bootstrap") mod$RunBootstrapFilter(parms)
+      else mod$RunFrankenFilter(parms)
+      lml_prop <- mod$lml
+      # log-prior
+      lprior_prop <- sum(-0.5 * (log_theta_prop/sd_prior)^2)
+      lprior_cur <- sum(-0.5 * (log_theta_cur/sd_prior)^2)
+      # MH ratio
+      lr <- lml_prop - lml_cur + lprior_prop - lprior_cur
+      if (log(stats::runif(1L)) < lr) {
+        # Accept
+        theta_cur <- theta_prop
+        log_theta_cur <- log(theta_cur)
+        lml_cur <- lml_prop
+        # accept_rate <- accept_rate + 1L
+      }
+      if (k > nadapt) draws_adapt[k - nadapt, ] <- log_theta_cur
     }
-    if (k > nadapt) draws_adapt[k - nadapt, ] <- log_theta_cur
-  }
-  # Estimate the proposal variance
-  if (is.matrix(S_prop)) {
-    S_prop <- t(chol(cov(draws_adapt)))
-  } else {
-    S_prop <- sd(draws_adapt)
+    # Estimate the proposal variance
+    if (is.matrix(S_prop)) {
+      S_prop <- t(chol(2.5*2.5*cov(draws_adapt) / nparms))
+    } else {
+      S_prop <- 1.5*sd(draws_adapt)
+    }
   }
 
   # Run the posterior sampling
+  number_trials <- 0.0
+  # lml <- numeric(ndpost)
   ini <- proc.time()
   for (k in seq_len(ndpost)) {
     if (k %% printevery == 0L) cat("Posterior sampling:", k,  "of", ndpost, "\n")
@@ -115,11 +118,16 @@ particleMCMC_bdi <- function(y, x0, dt,
     if (filter == "bootstrap") mod$RunBootstrapFilter(parms)
     else mod$RunFrankenFilter(parms)
     lml_prop <- mod$lml
+
+
     # log-prior
     lprior_prop <- sum(-0.5 * (log_theta_prop/sd_prior)^2)
     lprior_cur <- sum(-0.5 * (log_theta_cur/sd_prior)^2)
     # MH ratio
     lr <- lml_prop - lml_cur + lprior_prop - lprior_cur
+
+    # cat(theta_cur, theta_prop, lml_prop, lml_cur, lr, "\n")
+
     if (log(stats::runif(1L)) < lr) {
       # Accept
       theta_cur <- theta_prop
@@ -128,9 +136,13 @@ particleMCMC_bdi <- function(y, x0, dt,
       accept_rate <- accept_rate + 1L
     }
     draws[k, ] <- theta_cur
+    number_trials <- number_trials + mean(mod$number_trials)
+    # lml[k] <- lml_cur
   }
   end <- proc.time() - ini
-  attr(draws, "acceptance_rate") <- accept_rate / niter
+  attr(draws, "acceptance_rate") <- accept_rate / ndpost
   attr(draws, "time") <- end
+  attr(draws, "avg_trials") <- number_trials / ndpost
+  # attr(draws, "lml") <- lml_cur
   return(draws)
 }

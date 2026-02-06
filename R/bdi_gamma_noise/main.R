@@ -52,7 +52,7 @@ graphics.off()
 id_ <- which(alpha == 10.0)
 true_alpha <- alpha[id_]
 yt <- y[, id_]
-
+plot(ts(yt))
 # true_alpha <- 50.0
 # yt <- stats::rgamma(n = tmax, shape = true_alpha, rate = true_alpha / xt_retain)
 # plot(0:29, yt, col = "red", ylim = c(0, max(max(yt), max(xt))), pch = 19,
@@ -63,42 +63,41 @@ yt <- y[, id_]
 
 # Simple check
 # Rcpp::sourceCpp(file = file.path(path_local, "bdi.cpp"))
-n_particles <- 200L
-max_trials <- 200L
+n_particles <- 30L
+max_trials <- 100L
 target_success <- tmax
 mod <- new(BDI, yt, x0, 1/10, true_alpha, n_particles, target_success, max_trials)
-mod$RunBootstrapFilter(true_theta)#c(0.09, .8, 0.1)
-mod$lml
 mod$RunFrankenFilter(true_theta)
 mod$lml
-mod$number_trials
+# mod$number_trials
+mod$RunBootstrapFilter(true_theta)#c(0.09, .8, 0.1)
+mod$lml
 
 # Estimate Var(log(p)) for different number of particles -----------------------
 
 mc <- 2000L
 
 # BF
-N_particles <- c(10L, 20L, 30L, 35, 40L, 50L, 100L, 200L, 300L)
-list_lmls <- vector(mode = "list", length = length(N_particles))
+N_particles <- c(10L, 20L, 50L, 100L, 200L, 300L)
 var_lml <- mean_lml <- numeric(length = length(N_particles))
 for (j in seq_along(N_particles)) {
   cat(j, "\n")
-  mod <- new(BDI, yt, x0, 1/10, true_alpha, N_particles[j], target_success, max_trials)
   lmls <- mclapply(seq_len(mc), function(i) {
+    mod <- new(BDI, yt, x0, 1/10, true_alpha, N_particles[j], 1, 1)
     mod$RunBootstrapFilter(true_theta)
     return(mod$lml)
   }, mc.cores = 20L)
   lmls <- unlist(lmls)
-  # list_lmlmean_lmls[[j]] <- lmls
   mean_lml[j] <- mean(lmls)
   var_lml[j] <- var(lmls)
 }
 tab_bf <- cbind(N_particles, var_lml, mean_lml)
+tab_bf
 plot(N_particles, var_lml)
 
 # Franken filtering
 TARGET_SUCCESS <- c(20L, 30L, 50L, 100L, 200L)
-MAX_TRIALS <- c(100L, 500L, 1000L, 2000L)
+MAX_TRIALS <- c(1000L, 2000L)
 grid <- expand.grid(s = TARGET_SUCCESS, mp = MAX_TRIALS)
 nr <- nrow(grid)
 var_lml_franken <- numeric(length = nr)
@@ -118,51 +117,105 @@ for (j in seq_len(nr)) {
 tab_ff <- cbind(grid, var_lml_franken, exp_lml = mean_lml_franken)
 tab_ff
 
-out <- replicate(1000, {
-  mod <- new(BDI, yt, x0, 1/10, true_alpha, 10, 21, 500)
-  mod$RunFrankenFilter(true_theta)
-  c(mod$lml, mean(mod$number_trials), max(mod$number_trials))
-})
-# do.call(rbind, out)
-t(out)
+# out <- replicate(1000, {
+#   mod <- new(BDI, yt, x0, 1/10, true_alpha, 10, 21, 500)
+#   mod$RunFrankenFilter(true_theta)
+#   c(mod$lml, mean(mod$number_trials), max(mod$number_trials))
+# })
+# # do.call(rbind, out)
+# t(out)
+#
+# ids <- which(is.infinite(out[1, ]))
+# t(out[, ids])
+# ids <- which(out[3, ] == 500)
+# t(out[, ids])
 
-ids <- which(is.infinite(out[1, ]))
-t(out[, ids])
-ids <- which(out[3, ] == 500)
-t(out[, ids])
 
 
 
-# Try particleMCMC -------------------------------------------------------------
+# Particle MCMC to infer only \mu ----------------------------------------------
 
-res <- particleMCMC_bdi(y = yt, x0 = x0, dt = 1/10,
+res_bf <- particleMCMC_bdi(y = yt, x0 = x0, dt = 1/10,
                         filter = "bootstrap",
-                        n_particles = 400L,
+                        n_particles = 30L,
                         shape = true_alpha,
-                        ndpost = 8000L, nskip = 4000L,
+                        ndpost = 10000L, nskip = 10000L,
                         theta_fix = true_theta[-1L],
                         wh_fix = c(2L, 3L),
                         sd_prior = 1.0,
                         S_prop = 0.5,
                         printevery = 100L, theta_init = true_theta[1L])
 
-res2 <- particleMCMC_bdi(y = yt, x0 = x0, dt = 1/10,
-                        filter = "franken",
-                        target_success = 30L, max_trials = 400L,
-                        shape = true_alpha,
-                        ndpost = 8000L, nskip = 4000L,
-                        theta_fix = true_theta[-1L],
-                        wh_fix = c(2L, 3L),
-                        sd_prior = 1.0,
-                        S_prop = 0.5,
-                        printevery = 10L, theta_init = true_theta[1L])
-plot(res[, 1], type = "l")
-plot(res2[, 1], type = "l")
-ess_bf <- coda::effectiveSize(coda::as.mcmc(res))
-ess_ff <- coda::effectiveSize(coda::as.mcmc(res2))
+res_ff <- particleMCMC_bdi(y = yt, x0 = x0, dt = 1/10,
+                           filter = "franken",
+                           target_success = 30L, max_trials = 100L,
+                           shape = true_alpha,
+                           ndpost = 4000L, nskip = 5000L,
+                           theta_fix = true_theta[-1L],
+                           wh_fix = c(2L, 3L),
+                           sd_prior = 1.0,
+                           S_prop = 0.5,
+                           printevery = 100L, theta_init = true_theta[1L])
+plot(res_ff[, 1], type = "l"); abline(h = true_theta[1L], col = "red")
+plot(res_bf[, 1], type = "l"); abline(h = true_theta[1L], col = "red")
+ess_bf <- coda::effectiveSize(coda::as.mcmc(res_bf))
+ess_ff <- coda::effectiveSize(coda::as.mcmc(res_ff))
 
-ess_bf/attr(res, "time")[3L]
-ess_ff/attr(res2, "time")[3L]
+attr(res_ff, "avg_trials")
+ess_bf/attr(res_bf, "time")[3L]
+ess_ff/attr(res_ff, "time")[3L]
+
+
+
+# Particle MCMC to infer \mu and \gamma ----------------------------------------
+
+res_bf <- particleMCMC_bdi(y = yt, x0 = x0, dt = 1/10,
+                           filter = "bootstrap",
+                           n_particles = 40L,
+                           shape = true_alpha,
+                           ndpost = 20000L, nskip = 20000L,
+                           theta_fix = true_theta[2L],
+                           wh_fix = 2L,
+                           sd_prior = c(1.0, 1.0),
+                           S_prop = diag(1, 2),
+                           printevery = 100L, theta_init = true_theta[-2L])
+par(mfrow = c(1, 2))
+plot(res_bf[, 1], type = "l"); abline(h = true_theta[1L], col = 2)
+plot(res_bf[, 2], type = "l"); abline(h = true_theta[3L], col = 2)
+
+res_ff <- particleMCMC_bdi(y = yt, x0 = x0, dt = 1/10,
+                           filter = "franken",
+                           target_success = 30L, max_trials = 100L,
+                           shape = true_alpha,
+                           ndpost = 20000L, nskip = 20000L,
+                           theta_fix = true_theta[2L],
+                           wh_fix = 2L,
+                           sd_prior = c(1.0, 1.0),
+                           S_prop = diag(1, 2),
+                           printevery = 100L, theta_init = true_theta[-2L])
+# cov(log(res_ff))
+# 2.5^2*cov(log(res_ff))/2
+
+par(mfrow = c(1, 2))
+plot(res_ff[, 1], type = "l"); abline(h = true_theta[1L], col = 2)
+plot(res_ff[, 2], type = "l"); abline(h = true_theta[3L], col = 2)
+plot(density(res_ff[, 1]))
+plot(density(res_ff[, 2]))
+
+head(cbind(res_ff, attr(res_ff, "lml")))
+head(cbind(res_bf, attr(res_bf, "lml")))
+
+
+par(mfrow = c(2, 2))
+plot(res_bf[, 1], type = "l"); abline(h = true_theta[1L], col = 2)
+plot(res_bf[, 2], type = "l"); abline(h = true_theta[3L], col = 2)
+plot(res_ff[, 1], type = "l"); abline(h = true_theta[1L], col = 2)
+plot(res_ff[, 2], type = "l"); abline(h = true_theta[3L], col = 2)
+ess_bf <- coda::effectiveSize(coda::as.mcmc(res_bf))
+ess_ff <- coda::effectiveSize(coda::as.mcmc(res_ff))
+
+ess_bf/attr(res_bf, "time")[3L]
+ess_ff/attr(res_ff, "time")[3L]
 
 
 
