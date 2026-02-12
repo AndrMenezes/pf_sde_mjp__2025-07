@@ -63,6 +63,7 @@ particleMCMC_bdi <- function(y, x0, dt,
   niter <- ndpost + nskip
   draws <- matrix(0.0, nrow = ndpost, ncol = nparms)
   accept_rate <- 0L
+  avg_pct_m_max_reached <- numeric(niter)
 
   ini <- proc.time()
   # Get estimate of the likelihood
@@ -96,6 +97,7 @@ particleMCMC_bdi <- function(y, x0, dt,
         # accept_rate <- accept_rate + 1L
       }
       if (k > nadapt) draws_adapt[k - nadapt, ] <- log_theta_cur
+      avg_pct_m_max_reached[k] <- mod$pct_m_max_reached
     }
     # Estimate the proposal variance
     if (is.matrix(S_prop)) {
@@ -137,12 +139,14 @@ particleMCMC_bdi <- function(y, x0, dt,
     }
     draws[k, ] <- theta_cur
     number_trials <- number_trials + mean(mod$number_trials)
+    avg_pct_m_max_reached[k] <- mod$pct_m_max_reached
     # lml[k] <- lml_cur
   }
   end <- proc.time() - ini
   attr(draws, "acceptance_rate") <- accept_rate / ndpost
   attr(draws, "time") <- end
   attr(draws, "avg_trials") <- number_trials / ndpost
+  attr(draws, "avg_pct_m_max_reached") <- avg_pct_m_max_reached
   # attr(draws, "lml") <- lml_cur
   return(draws)
 }

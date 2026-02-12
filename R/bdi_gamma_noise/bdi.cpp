@@ -79,7 +79,7 @@ public:
   arma::mat x_bridge;
   std::vector<double> x_particles, x_weights, log_uweights, weights;
   std::vector<int> x_ancestors, ancestors, aux_ancestors;
-
+  double pct_m_max_reached;
   std::vector<int> number_trials;
 
   // Fields for the particleMCMC
@@ -232,6 +232,8 @@ void BDI::RunFrankenFilter(std::vector<double> parameters) {
   int m = 0, anc = 0;
   double k = 0.0, l_tmp = 0.0, ln_sup_g;
 
+  pct_m_max_reached = 0.0;
+
   // Set log-like to 0
   lml = 0.0;
 
@@ -287,8 +289,10 @@ void BDI::RunFrankenFilter(std::vector<double> parameters) {
 
     // save number of trials
     number_trials[t] = m;
+    if (m == max_trials) pct_m_max_reached++;
     //m_prev = m;
   }
+  pct_m_max_reached /= n_obs;
 }
 
 
@@ -453,6 +457,7 @@ RCPP_MODULE(BDI) {
   .field("weights", &BDI::x_weights)
   .field("weights_curr", &BDI::weights)
   .field("number_trials", &BDI::number_trials)
+  .field("pct_m_max_reached", &BDI::pct_m_max_reached)
 
    // particleMCMC fields
   .field("draws_mu", &BDI::draws_mu)

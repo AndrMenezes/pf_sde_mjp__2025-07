@@ -69,7 +69,8 @@ target_success <- tmax
 mod <- new(BDI, yt, x0, 1/10, true_alpha, n_particles, target_success, max_trials)
 mod$RunFrankenFilter(true_theta)
 mod$lml
-# mod$number_trials
+mod$number_trials
+mod$pct_m_max_reached
 mod$RunBootstrapFilter(true_theta)#c(0.09, .8, 0.1)
 mod$lml
 
