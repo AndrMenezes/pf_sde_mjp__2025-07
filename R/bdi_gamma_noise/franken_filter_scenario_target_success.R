@@ -93,19 +93,23 @@ list_sim <- readRDS(file = file.path(path_res, "draws.rds"))
 
 # Compute the efficiency = min ESS / sec ----------------------------------
 
-m1 <- length(TARGET_SUCCESS)
+m1 <- length(TARGET_SUCCESS) #- 1
 m2 <- length(true_alpha)
-efficiency <- matrix(nrow = m1 * m2, ncol = 4)
-for (k in seq_along(true_alpha)) {
-  for (j in seq_along(TARGET_SUCCESS)) {
+efficiency <- matrix(nrow = m1 * m2, ncol = 6)
+for (k in seq_len(m2)) {
+  for (j in seq_len(m1)) {
     idx <- m1 * (k - 1) + j
     cat(idx, "\n")
     draws <- list_sim[[k]][[j]]
     ess <- min(coda::effectiveSize(coda::as.mcmc(draws)))
+    # if (idx == 15) {ess <- 0.0; tt <- 1}
+    # else  {ess <- min(coda::effectiveSize(coda::as.mcmc(draws))); tt=attr(draws, "time")[3]}
     efficiency[idx, 1L] <- TARGET_SUCCESS[j]
     efficiency[idx, 2L] <- true_alpha[k]
     efficiency[idx, 3L] <- ess
     efficiency[idx, 4L] <- ess / attr(draws, "time")[3]
+    efficiency[idx, 5L] <- ess / TARGET_SUCCESS[j]
+    efficiency[idx, 6L] <- attr(draws, "avg_trials")
   }
 }
 
@@ -119,7 +123,8 @@ plot(efficiency[1:m1, 1], efficiency[1:m1, 3], type = "o")
 plot(efficiency[(m1+1):(2*m1), 1], efficiency[(m1+1):(2*m1), 3], type = "o")
 plot(efficiency[(2*m1+1):(3*m1), 1], efficiency[(2*m1+1):(3*m1), 3], type = "o")
 
-colnames(efficiency) <- c("target_success", "alpha", "mESS", "mESS_s")
+colnames(efficiency) <- c("target_success", "alpha", "mESS", "mESS_s", "mESS_target_s",
+                          "avg_trials")
 efficiency <- as.data.frame(efficiency)
 efficiency$alpha <- paste0("alpha == ", efficiency$alpha)
 efficiency$alpha <- forcats::fct_relevel(efficiency$alpha, "alpha == 5", "alpha == 10")
@@ -134,19 +139,42 @@ p_ef <- ggplot(data = efficiency, aes(x = target_success, y = mESS_s)) +
 save_plot(filename = file.path(path_res, "mESS_sec.png"), plot = p_ef,
           base_height = 8, bg = "white")
 
+p_avg_trials <- ggplot(data = efficiency, aes(x = avg_trials)) +
+  facet_wrap(~alpha, labeller = label_parsed) +
+  geom_histogram(bins = 10) +
+  geom_line() +
+  geom_vline(xintercept = tmax) +
+  labs(x = "Target success (s)", y = "mESS/targetNumberOfSuccessess") +
+  scale_x_continuous(breaks = scales::pretty_breaks(6))
+save_plot(filename = file.path(path_res, "mESS_targetS.png"), plot = p_ef2,
+          base_height = 8, bg = "white")
+
+p_ef2 <- ggplot(data = efficiency, aes(x = target_success, y = mESS_target_s)) +
+  facet_wrap(~alpha, labeller = label_parsed) +
+  geom_point() +
+  geom_line() +
+  geom_vline(xintercept = tmax) +
+  labs(x = "Target success (s)", y = "mESS/targetNumberOfSuccessess") +
+  scale_x_continuous(breaks = scales::pretty_breaks(6))
+save_plot(filename = file.path(path_res, "mESS_targetS.png"), plot = p_ef2,
+          base_height = 8, bg = "white")
+
 # Trace plots for different \alpha's --------------------------------------
 
 # k=1
-dat_true <- lapply(seq_along(TARGET_SUCCESS), function(i) {
+dat_true <- lapply(seq_len(m1), function(i) {
   data.frame(parms = c("mu", "gamma"), value = true_theta[-2L],
              target_success = TARGET_SUCCESS[i])
   })
 dat_true <- do.call(rbind, dat_true)
 for (k in seq_along(true_alpha)) {
+  cat(k, "\n")
+  # if (k == 1L)
+  # list_sim[[k]][[15]] <- NULL
   dat <- as.data.frame(do.call(rbind, list_sim[[k]]))
   colnames(dat) <- c("mu", "gamma")
-  dat$iter <- rep(seq_len(NDPOST), times = length(TARGET_SUCCESS))
-  dat$target_success <- rep(TARGET_SUCCESS, each = NDPOST)
+  dat$iter <- rep(seq_len(NDPOST), times = m1)
+  dat$target_success <- rep(TARGET_SUCCESS[-15], each = NDPOST)
   dat <- tidyr::pivot_longer(data = dat, cols = -c(iter, target_success), names_to = "parms")
   p <- ggplot(data = dat, aes(x = iter, y = value)) +
     facet_wrap(parms~target_success, scales = "free_y", label = label_parsed) +
@@ -154,7 +182,7 @@ for (k in seq_along(true_alpha)) {
     geom_hline(data = dat_true, aes(yintercept = value), col = "red") +
     labs(x = "Iteration", y = "Draw")
   ff <- paste0("trace_", true_alpha[k], ".png")
-  save_plot(filename = file.path(path_local, "results", ff), plot = p,
+  save_plot(filename = file.path(path_res, ff), plot = p,
             base_height = 10, bg = "white")
 }
 
