@@ -6,7 +6,7 @@ source("./R/utils.R")
 
 # Paths
 path_local <- "./R/bdi_gamma_noise/"
-time_id <- format(Sys.time(), "%Y-%b-%d-%X")
+time_id <- format(Sys.time(), "%Y-%b-%d-%X") #"2026-Feb-12-16:31:33"#
 path_res <- file.path(path_local, "results", time_id)
 if (!dir.exists(path_res)) dir.create(path = path_res)
 
@@ -18,7 +18,7 @@ source(file.path(path_local, "particleMCMC.R"))
 theme_set(theme_cowplot(font_size = 16) + background_grid())
 
 # Seed for reproducibility
-set.seed(11)
+set.seed(12)
 
 # Example: Birth-Death-Immigration (BDI) model
 # X --> 2X (birth: \mu)
@@ -46,23 +46,24 @@ retain <- c(1, seq.int(11, length(t_continuous), length.out = tmax - 1))
 t_retain <- t_continuous[retain]
 xt_retain <- xt[retain]
 
-par(mfrow = c(1, 3))
 true_alpha <- c(5.0, 10, 50)
+# par(mfrow = c(1, 3))
 y <- matrix(0.0, nrow = tmax, ncol = length(true_alpha))
 for (k in seq_along(true_alpha)) {
   y[, k] <- stats::rgamma(n = tmax, shape = true_alpha[k], rate = true_alpha[k] / xt_retain)
-  plot(0:29, y[, k], col = "red", ylim = c(0, max(max(y[, k]), max(xt))), pch = 19,
-       ylab = "", xlab = "t", main = paste0("alpha = ", true_alpha[k]))
-  lines(t_continuous, xt)
-  lines(0:29, xt_retain, col = "blue", pch = 18)
+  # plot(0:29, y[, k], col = "red", ylim = c(0, max(max(y[, k]), max(xt))), pch = 19,
+  #      ylab = "", xlab = "t", main = paste0("alpha = ", true_alpha[k]))
+  # lines(t_continuous, xt)
+  # lines(0:29, xt_retain, col = "blue", pch = 18)
 }
-graphics.off()
+# graphics.off()
 
 # Run particle MCMC for different target ---------------------------------------
 min_s <- 10L
-max_s <- 150L # change to 100L for the first results
+max_s <- 200L # change to 100L for the first results
 step <- 10L
-TARGET_SUCCESS <- seq.int(min_s, max_s, by = step)
+TARGET_SUCCESS <- c(5L, seq.int(min_s, max_s, by = step))
+LEN_S <- length(TARGET_SUCCESS)
 MAX_TRIALS <- 1000L
 NDPOST <- 50000L
 NSKIP <- 50000L
@@ -72,7 +73,7 @@ for (k in seq_along(true_alpha)) {
   cat(k, "\n")
   y_cur <- y[, k]
   a_cur <- true_alpha[k]
-  list_sim[[k]] <- mclapply(seq_along(TARGET_SUCCESS), function(i) {
+  list_sim[[k]] <- mclapply(seq_len(LEN_S), function(i) {
     res_ff <- particleMCMC_bdi(y = y_cur, x0 = x0, dt = 1/10,
                                filter = "franken",
                                target_success = TARGET_SUCCESS[i],
@@ -91,45 +92,44 @@ saveRDS(object = list_sim, file = file.path(path_res, "draws.rds"))
 # Import results from the experiment
 list_sim <- readRDS(file = file.path(path_res, "draws.rds"))
 
-# Compute the efficiency = min ESS / sec ----------------------------------
 
-m1 <- length(TARGET_SUCCESS) #- 1
+
+# Append results in a matrix ----------------------------------------------
+
+
+
+m1 <- length(TARGET_SUCCESS)
 m2 <- length(true_alpha)
-efficiency <- matrix(nrow = m1 * m2, ncol = 6)
+data_results <- matrix(nrow = m1 * m2, ncol = 8L)
 for (k in seq_len(m2)) {
+  # cat(k, "\n")
   for (j in seq_len(m1)) {
     idx <- m1 * (k - 1) + j
     cat(idx, "\n")
     draws <- list_sim[[k]][[j]]
-    ess <- min(coda::effectiveSize(coda::as.mcmc(draws)))
-    # if (idx == 15) {ess <- 0.0; tt <- 1}
-    # else  {ess <- min(coda::effectiveSize(coda::as.mcmc(draws))); tt=attr(draws, "time")[3]}
-    efficiency[idx, 1L] <- TARGET_SUCCESS[j]
-    efficiency[idx, 2L] <- true_alpha[k]
-    efficiency[idx, 3L] <- ess
-    efficiency[idx, 4L] <- ess / attr(draws, "time")[3]
-    efficiency[idx, 5L] <- ess / TARGET_SUCCESS[j]
-    efficiency[idx, 6L] <- attr(draws, "avg_trials")
+    data_results[idx, 1L] <- TARGET_SUCCESS[j]
+    data_results[idx, 2L] <- true_alpha[k]
+    if (is.matrix(draws)) {
+      ess <- min(coda::effectiveSize(coda::as.mcmc(draws)))
+      data_results[idx, 3L] <- ess
+      data_results[idx, 4L] <- ess / attr(draws, "time")[3]
+      data_results[idx, 5L] <- ess / TARGET_SUCCESS[j]
+      data_results[idx, 6L] <- attr(draws, "avg_trials")
+      data_results[idx, 7L] <- attr(draws, "acceptance_rate")
+      data_results[idx, 8L] <- mean(attr(draws, "avg_pct_m_max_reached"))
+    }
   }
 }
 
-par(mfrow = c(1, 3))
-plot(efficiency[1:m1, 1], efficiency[1:m1, 4], type = "o")
-plot(efficiency[(m1+1):(2*m1), 1], efficiency[(m1+1):(2*m1), 4], type = "o")
-plot(efficiency[(2*m1+1):(3*m1), 1], efficiency[(2*m1+1):(3*m1), 4], type = "o")
-
-par(mfrow = c(1, 3))
-plot(efficiency[1:m1, 1], efficiency[1:m1, 3], type = "o")
-plot(efficiency[(m1+1):(2*m1), 1], efficiency[(m1+1):(2*m1), 3], type = "o")
-plot(efficiency[(2*m1+1):(3*m1), 1], efficiency[(2*m1+1):(3*m1), 3], type = "o")
-
-colnames(efficiency) <- c("target_success", "alpha", "mESS", "mESS_s", "mESS_target_s",
-                          "avg_trials")
-efficiency <- as.data.frame(efficiency)
-efficiency$alpha <- paste0("alpha == ", efficiency$alpha)
-efficiency$alpha <- forcats::fct_relevel(efficiency$alpha, "alpha == 5", "alpha == 10")
+colnames(data_results) <- c("target_success", "alpha", "mESS", "mESS_s",
+                            "mESS_target_s", "avg_trials", "accept_rate",
+                            "pct_m_max_reached")
+data_results <- as.data.frame(data_results)
+data_results$alpha <- paste0("alpha == ", data_results$alpha)
+data_results$alpha <- forcats::fct_relevel(data_results$alpha, "alpha == 5",
+                                           "alpha == 10")
 #
-p_ef <- ggplot(data = efficiency, aes(x = target_success, y = mESS_s)) +
+p_ef <- ggplot(data = data_results, aes(x = target_success, y = mESS_s)) +
   facet_wrap(~alpha, labeller = label_parsed) +
   geom_point() +
   geom_line() +
@@ -139,25 +139,37 @@ p_ef <- ggplot(data = efficiency, aes(x = target_success, y = mESS_s)) +
 save_plot(filename = file.path(path_res, "mESS_sec.png"), plot = p_ef,
           base_height = 8, bg = "white")
 
-p_avg_trials <- ggplot(data = efficiency, aes(x = avg_trials)) +
-  facet_wrap(~alpha, labeller = label_parsed) +
-  geom_histogram(bins = 10) +
-  geom_line() +
-  geom_vline(xintercept = tmax) +
-  labs(x = "Target success (s)", y = "mESS/targetNumberOfSuccessess") +
-  scale_x_continuous(breaks = scales::pretty_breaks(6))
-save_plot(filename = file.path(path_res, "mESS_targetS.png"), plot = p_ef2,
-          base_height = 8, bg = "white")
-
-p_ef2 <- ggplot(data = efficiency, aes(x = target_success, y = mESS_target_s)) +
+p_ef2 <- ggplot(data = data_results, aes(x = target_success, y = mESS_target_s)) +
   facet_wrap(~alpha, labeller = label_parsed) +
   geom_point() +
   geom_line() +
   geom_vline(xintercept = tmax) +
-  labs(x = "Target success (s)", y = "mESS/targetNumberOfSuccessess") +
+  labs(x = "Target success (s)", y = "mESS/target_success") +
   scale_x_continuous(breaks = scales::pretty_breaks(6))
 save_plot(filename = file.path(path_res, "mESS_targetS.png"), plot = p_ef2,
           base_height = 8, bg = "white")
+
+p_m_max <- ggplot(data = data_results,
+                  aes(x = target_success, y = pct_m_max_reached)) +
+  facet_wrap(~alpha, labeller = label_parsed) +
+  geom_point() +
+  geom_line() +
+  # geom_vline(xintercept = tmax) +
+  labs(x = "Target success (s)", y = "mean(pct_m_max_reached)") +
+  scale_x_continuous(breaks = scales::pretty_breaks(6))
+save_plot(filename = file.path(path_res, "pct_m_max_reached.png"),
+          plot = p_m_max,
+          base_height = 8, bg = "white")
+
+p_ar <- ggplot(data = data_results, aes(x = target_success, y = accept_rate)) +
+  facet_wrap(~alpha, labeller = label_parsed) +
+  geom_point() +
+  geom_line() +
+  # geom_vline(xintercept = tmax) +
+  labs(x = "Target success (s)", y = "Acceptance rate") +
+  scale_x_continuous(breaks = scales::pretty_breaks(6))
+save_plot(filename = file.path(path_res, "acceptance_rate_targetS.png"),
+          plot = p_ar, base_height = 8, bg = "white")
 
 # Trace plots for different \alpha's --------------------------------------
 
@@ -169,9 +181,8 @@ dat_true <- lapply(seq_len(m1), function(i) {
 dat_true <- do.call(rbind, dat_true)
 for (k in seq_along(true_alpha)) {
   cat(k, "\n")
-  # if (k == 1L)
-  # list_sim[[k]][[15]] <- NULL
-  dat <- as.data.frame(do.call(rbind, list_sim[[k]]))
+  # if (!is.matrix(list_sim[[k]])) next
+  dat <- as.data.frame(do.call(rbind, list_sim[[k]][1:15] ))
   colnames(dat) <- c("mu", "gamma")
   dat$iter <- rep(seq_len(NDPOST), times = m1)
   dat$target_success <- rep(TARGET_SUCCESS[-15], each = NDPOST)
